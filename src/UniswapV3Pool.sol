@@ -10,23 +10,17 @@ error InsufficientInputAmount();
 
 interface IUniswapV3MintCallback {
     function uniswapV3MintCallback(uint256 amount0, uint256 amount1) external;
+
+    function uniswapV3SwapCallback(int256 amount0, int256 amount1) external;
 }
 
 interface IERC20 {
     function balanceOf(address token) external returns (uint256);
+
+    function transfer(address recipient, uint256 amount) external;
 }
 
 contract UniswapV3Pool {
-    event Mint(
-        address indexed sender,
-        address indexed owner,
-        int24 lowerTick,
-        int24 upperTick,
-        uint128 amount,
-        uint256 amount0,
-        uint256 amount1
-    );
-
     using Tick for mapping(int24 => Tick.Info);
     using Position for mapping(bytes32 => Position.Info);
     using Position for Position.Info;
@@ -54,6 +48,27 @@ contract UniswapV3Pool {
     mapping(int24 => Tick.Info) public ticks;
     // Position info
     mapping(bytes32 => Position.Info) public positions;
+
+    // events
+    event Mint(
+        address indexed sender,
+        address indexed owner,
+        int24 lowerTick,
+        int24 upperTick,
+        uint128 amount,
+        uint256 amount0,
+        uint256 amount1
+    );
+
+    event Swap(
+        address indexed sender,
+        address indexed recipient,
+        int256 amount0,
+        int256 amount1,
+        uint160 sqrtPriceX96,
+        uint128 liquidity,
+        int24 tick
+    );
 
     constructor(
         address token0_,
@@ -117,6 +132,38 @@ contract UniswapV3Pool {
             amount,
             amount0,
             amount1
+        );
+    }
+
+    function swap(
+        address recipient
+    ) public returns (int256 amount0, int256 amount1) {
+        int24 nextTick = 85184;
+        uint160 nextPrice = 5604469350942327889444743441197;
+
+        amount0 = -0.008396714242162444 ether;
+        amount1 = 42 ether;
+
+        (slot0.tick, slot0.sqrtPriceX96) = (nextTick, nextPrice);
+
+        IERC20(token0).transfer(recipient, uint256(-amount0));
+
+        uint256 balance1Before = balance1();
+        IUniswapV3MintCallback(msg.sender).uniswapV3SwapCallback(
+            amount0,
+            amount1
+        );
+        if (balance1Before + uint256(amount1) < balance1())
+            revert InsufficientInputAmount();
+
+        emit Swap(
+            msg.sender,
+            recipient,
+            amount0,
+            amount1,
+            slot0.sqrtPriceX96,
+            liquidity,
+            slot0.tick
         );
     }
 
